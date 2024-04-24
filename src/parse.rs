@@ -4,11 +4,13 @@ use crate::regex::Regex;
 use crate::regex::Regex::{Somewhere, Starts};
 
 fn or(input: &str) -> anyhow::Result<(&str, Regex)> {
+    // extract until the first pipe "|"
     let (left_input, right_input) = input
         .split_once('|')
         .ok_or_else(|| anyhow!("Expected | but couldn't find it {input}"))?;
     let (_, left) = regex_inner(left_input)?;
 
+    // extract until the first ")"
     let (right_input, remaining_input) = right_input
         .split_once(')')
         .ok_or_else(|| anyhow!("Expected ) but couldn't find it in {right_input}"))?;
@@ -39,28 +41,27 @@ fn any(input: &str) -> anyhow::Result<(&str, Regex)> {
 }
 
 fn escaped(input: &str) -> anyhow::Result<(&str, Regex)> {
-    let mut chars = input.chars();
-    let reg = match chars.next() {
-        Some('d') => Regex::Digit,
-        Some('w') => Regex::Alphanumeric,
-        Some('t') => Regex::Whitespace,
-        any => {
-            return Err(anyhow!("Expected 'd' or 'w' or 't' after '\\' but got {any:?}"));
-        }
+    let Some((first, reminder)) = split_first_char(input) else {
+        return Err(anyhow!(
+                "expected a value to be escaped"
+            ));
     };
-    Ok((chars.as_str(), reg))
+    let reg = match first {
+        'd' => Regex::Digit,
+        'w' => Regex::Alphanumeric,
+        't' => Regex::Whitespace,
+        c => Regex::Tag { c }
+    };
+    Ok((reminder, reg))
 }
 
 fn regex_inner(input: &str) -> anyhow::Result<(&str, Regex)> {
-    let mut chars = input.chars();
-    let (first, reminder) = if let Some(first) = chars.next() {
-        (first, chars.as_str())
-    } else {
+    let Some((first, reminder)) = split_first_char(input) else {
         return Ok((input, Regex::Noop));
     };
 
     let (reminder, reg) = match first {
-        '*' => (reminder, Regex::Wildcard),
+        '.' => (reminder, Regex::Wildcard),
         '$' if reminder.is_empty() => (reminder, Regex::Ends),
         '$' => {
             return Err(anyhow!("found $ not in the end of the line"));
@@ -77,6 +78,9 @@ fn regex_inner(input: &str) -> anyhow::Result<(&str, Regex)> {
     } else if let Some(stripped) = reminder.strip_prefix('?') {
         let (i, n) = regex_inner(stripped)?;
         (i, Regex::ZeroOrOne(Box::new(reg), Box::new(n)))
+    } else if let Some(stripped) = reminder.strip_prefix('*') {
+        let (i, n) = regex_inner(stripped)?;
+        (i, Regex::ZeroOrMany(Box::new(reg), Box::new(n)))
     } else {
         let (i, n) = regex_inner(reminder)?;
         (i, Regex::And(Box::new(reg), Box::new(n)))
@@ -85,6 +89,25 @@ fn regex_inner(input: &str) -> anyhow::Result<(&str, Regex)> {
     Ok((reminder, reg))
 }
 
+fn split_first_char(input: &str) -> Option<(char, &str)> {
+    let mut chars = input.chars();
+    chars.next().map(|first| (first, chars.as_str()))
+}
+
+/// Parses an input string containing a regex expression and returns a parsed Regex.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the input regex expression.
+///
+/// # Returns
+///
+/// A Result containing the parsed Regex.
+///
+/// # Errors
+///
+/// Returns an error if parsing of the regex fails.
+///
 pub fn regex(input: &str) -> anyhow::Result<Regex> {
     let (starts, input) = input
         .strip_prefix('^')

@@ -3,7 +3,8 @@ use crate::parse::regex;
 pub mod parse;
 pub mod regex;
 
-fn find(haystack: &str, pattern: &str) -> bool {
+
+pub fn find(haystack: &str, pattern: &str) -> bool {
     regex(pattern).unwrap().exact(haystack).is_some()
 }
 
@@ -97,5 +98,23 @@ mod test {
         assert!(find("log", "^log$"));
         assert!(!find("logs", "^log$"));
         assert!(!find("slog", "^log$"))
+    }
+
+    #[test]
+    fn counters() {
+        // ?
+        assert!(find("", "^\\w?$"));
+        assert!(find("a", "^\\w?$"));
+        assert!(!find("aaaaa", "^\\w?$"));
+
+        // +
+        assert!(!find("", "^\\w+$"));
+        assert!(find("a", "^\\w+$"));
+        assert!(find("aaaaa", "^\\w+$"));
+
+        // *
+        assert!(find("", "^\\w*$"));
+        assert!(find("a", "^\\w*$"));
+        assert!(find("aaaaa", "^\\w*$"));
     }
 }

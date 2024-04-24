@@ -10,6 +10,8 @@ pub enum Regex {
     NotAny { cs: Vec<char> },
     AtLeastOne(Box<Regex>, Box<Regex>),
     ZeroOrOne(Box<Regex>, Box<Regex>),
+    ZeroOrMany(Box<Regex>, Box<Regex>),
+    Quantifier(usize, usize, Box<Regex>, Box<Regex>),
     Or(Box<Regex>, Box<Regex>),
     And(Box<Regex>, Box<Regex>),
     Somewhere(Box<Regex>),
@@ -30,6 +32,10 @@ impl Regex {
             Regex::NotAny { cs } => Self::match_char(move |x| !cs.contains(&x), haystack),
             Regex::AtLeastOne(inner, follow) => self.match_at_least_one(haystack, inner, follow),
             Regex::ZeroOrOne(inner, follow) => Self::match_zero_or_one(haystack, inner, follow),
+            Regex::ZeroOrMany(inner, follow) => self.match_at_zero_or_many(haystack, inner, follow),
+            Regex::Quantifier(min, max, inner, follow) => {
+                todo!("implement quantifier")
+            }
             Regex::Or(left, right) => Self::match_or(haystack, left, right),
             Regex::And(left, right) => Self::match_and(haystack, left, right),
             Regex::Ends => Self::match_ends(haystack),
@@ -51,6 +57,18 @@ impl Regex {
                 None => follow.exact(next),
                 Some(next) => Some(next),
             },
+        }
+    }
+
+    fn match_at_zero_or_many<'a>(
+        &self,
+        haystack: &'a str,
+        inner: &Regex,
+        follow: &Regex,
+    ) -> Option<&'a str> {
+        match inner.exact(haystack) {
+            None => follow.exact(haystack),
+            Some(next) => self.exact(next)
         }
     }
 
@@ -87,8 +105,8 @@ impl Regex {
     }
 
     fn match_char<F>(condition: F, haystack: &str) -> Option<&str>
-    where
-        F: Fn(char) -> bool,
+        where
+            F: Fn(char) -> bool,
     {
         haystack
             .chars()
